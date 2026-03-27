@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Spinner</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0e17;
+    --card: #1a1829;
+    --accent: #ff6b6b;
+    --accent2: #ffd93d;
+    --text: #fffffe;
+    --muted: #a7a9be;
+    --radius: 16px;
+  }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 48px;
+    overflow-x: hidden;
+  }
+
+  /* Ambient blobs */
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.18;
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::before { width: 400px; height: 400px; background: #ff6b6b; top: -100px; left: -100px; }
+  body::after  { width: 350px; height: 350px; background: #ffd93d; bottom: -80px; right: -80px; }
+
+  h1 {
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(1.8rem, 5vw, 2.6rem);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+  }
+  h1 span { color: var(--accent2); }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 28px;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  .layout {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+    width: 100%;
+    max-width: 480px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* WHEEL CONTAINER */
+  .wheel-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .pointer-wrap {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+  }
+  .pointer-wrap svg { display: block; }
+
+  canvas {
+    border-radius: 50%;
+    box-shadow: 0 0 0 6px rgba(255,255,255,0.06), 0 12px 48px rgba(0,0,0,0.6);
+    display: block;
+  }
+
+  .spin-btn {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.4rem;
+    letter-spacing: 1px;
+    padding: 14px 48px;
+    border: none;
+    border-radius: 50px;
+    background: linear-gradient(135deg, var(--accent), #ff8e53);
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 6px 24px rgba(255,107,107,0.4);
+    transition: transform 0.15s, box-shadow 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+  .spin-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(255,107,107,0.55); }
+  .spin-btn:active:not(:disabled) { transform: scale(0.96); }
+  .spin-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* RESULT BANNER */
+  .result-banner {
+    background: linear-gradient(135deg, #ffd93d, #ff6b6b);
+    border-radius: 14px;
+    padding: 14px 24px;
+    text-align: center;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #0f0e17;
+    min-height: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    opacity: 0;
+    transform: scale(0.9);
+    transition: opacity 0.4s, transform 0.4s;
+  }
+  .result-banner.show { opacity: 1; transform: scale(1); }
+  .result-banner .label { font-size: 0.78rem; font-weight: 600; opacity: 0.7; display: block; }
+  .result-banner .task-name { font-family: 'Fredoka One', cursive; font-size: 1.3rem; }
+
+  /* TASK PANEL */
+  .panel {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 20px;
+    width: 100%;
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+  .panel-title {
+    font-weight: 800;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  .add-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .add-row input {
+    flex: 1;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 0.95rem;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .add-row input::placeholder { color: var(--muted); }
+  .add-row input:focus { border-color: var(--accent2); }
+  .add-row button {
+    background: var(--accent2);
+    color: #0f0e17;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .add-row button:hover { transform: scale(1.08); }
+
+  .task-list { display: flex; flex-direction: column; gap: 7px; max-height: 240px; overflow-y: auto; padding-right: 2px; }
+  .task-list::-webkit-scrollbar { width: 4px; }
+  .task-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+  .task-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 9px;
+    padding: 9px 12px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    animation: slideIn 0.25s ease;
+  }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+
+  .dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+  .task-label { flex: 1; }
+  .del-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 5px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .del-btn:hover { color: var(--accent); background: rgba(255,107,107,0.12); }
+
+  .empty-hint { color: var(--muted); font-size: 0.88rem; text-align: center; padding: 16px 0 4px; }
+
+  /* confetti burst (CSS only) */
+  .confetti-container {
+    position: fixed; inset: 0; pointer-events: none; z-index: 999; overflow: hidden;
+  }
+  .confetti-particle {
+    position: absolute;
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    opacity: 0;
+    animation: confettiFall 1.4s ease forwards;
+  }
+  @keyframes confettiFall {
+    0%   { opacity: 1; transform: translateY(-10px) rotate(0deg) scale(1); }
+    100% { opacity: 0; transform: translateY(80vh) rotate(720deg) scale(0.4); }
+  }
+</style>
+</head>
+<body>
+
+<h1>🎡 Task <span>Spinner</span></h1>
+<p class="subtitle">Can't decide what to do? Let the wheel choose!</p>
+
+<div class="layout">
+
+  <div class="wheel-wrap">
+    <!-- Pointer arrow -->
+    <div class="pointer-wrap">
+      <svg width="34" height="28" viewBox="0 0 34 28" fill="none">
+        <polygon points="17,26 2,2 32,2" fill="#ffd93d" stroke="#0f0e17" stroke-width="2"/>
+      </svg>
+    </div>
+    <canvas id="wheel" width="310" height="310"></canvas>
+  </div>
+
+  <button class="spin-btn" id="spinBtn" onclick="spin()">SPIN IT!</button>
+
+  <div class="result-banner" id="result">
+    <div>
+      <span class="label">YOUR TASK IS</span>
+      <span class="task-name" id="resultText">—</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">📝 My Tasks</div>
+    <div class="add-row">
+      <input type="text" id="taskInput" placeholder="Add a task..." maxlength="40"
+        onkeydown="if(event.key==='Enter') addTask()">
+      <button onclick="addTask()">+</button>
+    </div>
+    <div class="task-list" id="taskList"></div>
+    <p class="empty-hint" id="emptyHint" style="display:none">No tasks yet — add some above!</p>
+  </div>
+
+</div>
+
+<div class="confetti-container" id="confettiContainer"></div>
+
+<script>
+const COLORS = [
+  '#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#ff922b',
+  '#cc5de8','#f06595','#38d9a9','#74c0fc','#a9e34b'
+];
+
+let tasks = [
+  'Study Spanish', 'Prep skeleton', 'Case study sign up',
+  'Nur work 1', 'Nur work 2', 'Ruth chapter 5', 'NAP 😴'
+];
+
+let angle = 0;
+let spinning = false;
+const canvas = document.getElementById('wheel');
+const ctx = canvas.getContext('2d');
+
+function drawWheel() {
+  const cx = canvas.width / 2, cy = canvas.height / 2, r = cx - 8;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (tasks.length === 0) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#1a1829';
+    ctx.fill();
+    ctx.fillStyle = '#a7a9be';
+    ctx.font = 'bold 16px Nunito, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Add tasks!', cx, cy);
+    return;
+  }
+
+  const slice = (Math.PI * 2) / tasks.length;
+
+  tasks.forEach((task, i) => {
+    const start = angle + i * slice;
+    const end = start + slice;
+
+    // Slice
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, start, end);
+    ctx.closePath();
+    ctx.fillStyle = COLORS[i % COLORS.length];
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Text
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(start + slice / 2);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#0f0e17';
+    ctx.font = `bold ${tasks.length > 7 ? 11 : 13}px Nunito, sans-serif`;
+    const maxLen = 16;
+    const label = task.length > maxLen ? task.slice(0, maxLen - 1) + '…' : task;
+    ctx.fillText(label, r - 14, 4);
+    ctx.restore();
+  });
+
+  // Centre circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+  ctx.fillStyle = '#0f0e17';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 11px Nunito';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('GO!', canvas.width/2, canvas.height/2);
+}
+
+function getWinner() {
+  // Pointer is at the top (270° = -π/2)
+  const slice = (Math.PI * 2) / tasks.length;
+  const norm = (((-angle - Math.PI / 2) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  return Math.floor(norm / slice) % tasks.length;
+}
+
+let rafId;
+function spin() {
+  if (spinning || tasks.length < 2) return;
+  spinning = true;
+  document.getElementById('spinBtn').disabled = true;
+  document.getElementById('result').classList.remove('show');
+
+  const totalRotation = (Math.PI * 2) * (5 + Math.random() * 5);
+  const duration = 3500 + Math.random() * 1200;
+  const startAngle = angle;
+  const startTime = performance.now();
+
+  function easeOut(t) {
+    return 1 - Math.pow(1 - t, 4);
+  }
+
+  function frame(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    angle = startAngle + totalRotation * easeOut(progress);
+    drawWheel();
+
+    if (progress < 1) {
+      rafId = requestAnimationFrame(frame);
+    } else {
+      angle = startAngle + totalRotation;
+      drawWheel();
+      spinning = false;
+      document.getElementById('spinBtn').disabled = false;
+      const winner = getWinner();
+      showResult(tasks[winner]);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+function showResult(task) {
+  document.getElementById('resultText').textContent = task;
+  const banner = document.getElementById('result');
+  banner.classList.add('show');
+  launchConfetti();
+}
+
+function launchConfetti() {
+  const container = document.getElementById('confettiContainer');
+  container.innerHTML = '';
+  const confColors = ['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#ff922b','#cc5de8'];
+  for (let i = 0; i < 60; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti-particle';
+    el.style.cssText = `
+      left: ${20 + Math.random() * 60}%;
+      top: ${Math.random() * 20}%;
+      background: ${confColors[Math.floor(Math.random() * confColors.length)]};
+      animation-delay: ${Math.random() * 0.5}s;
+      animation-duration: ${1 + Math.random() * 0.8}s;
+      transform: rotate(${Math.random() * 360}deg);
+      width: ${6 + Math.random() * 8}px;
+      height: ${6 + Math.random() * 8}px;
+    `;
+    container.appendChild(el);
+  }
+  setTimeout(() => container.innerHTML = '', 2500);
+}
+
+// Task management
+function renderTasks() {
+  const list = document.getElementById('taskList');
+  const hint = document.getElementById('emptyHint');
+  list.innerHTML = '';
+  if (tasks.length === 0) { hint.style.display = 'block'; drawWheel(); return; }
+  hint.style.display = 'none';
+  tasks.forEach((t, i) => {
+    const item = document.createElement('div');
+    item.className = 'task-item';
+    item.innerHTML = `
+      <div class="dot" style="background:${COLORS[i % COLORS.length]}"></div>
+      <span class="task-label">${t}</span>
+      <button class="del-btn" onclick="removeTask(${i})" title="Remove">✕</button>
+    `;
+    list.appendChild(item);
+  });
+  drawWheel();
+}
+
+function addTask() {
+  const input = document.getElementById('taskInput');
+  const val = input.value.trim();
+  if (!val) return;
+  tasks.push(val);
+  input.value = '';
+  renderTasks();
+}
+
+function removeTask(i) {
+  tasks.splice(i, 1);
+  renderTasks();
+}
+
+renderTasks();
+</script>
+</body>
+</html>
